@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+
+st.set_page_config(layout="wide", page_title="Battery Storage Analysis")
 
 def calculate_cashflows(params):
     """Calculate annual cash flows and financial metrics"""
@@ -25,7 +26,7 @@ def calculate_cashflows(params):
     cash_flows.extend([annual_savings] * params['analysis_years'])
     
     # Calculate cumulative NPV for each year
-    discount_rate = 0.03  # 3% discount rate
+    discount_rate = 0.08  # 8% discount rate
     npv_values = []
     running_npv = -total_system_cost
     
@@ -110,39 +111,19 @@ with metrics_col4:
 with metrics_col5:
     st.metric("IRR", f"{results['irr']*100:.1f}%")
 
-# Create matplotlib figure
-fig, ax = plt.subplots(figsize=(10, 6))
+# Create DataFrame for chart
+df = pd.DataFrame({
+    'Year': results['years'],
+    'NPV': results['npv_values']
+})
 
-# Plot NPV line
-ax.plot(results['years'], results['npv_values'], marker='o', linewidth=2, color='blue')
+# Display chart
+st.subheader("Project Cash Flows")
+st.line_chart(df.set_index('Year'))
 
-# Add value labels
-for i, npv in enumerate(results['npv_values']):
-    if i % 2 == 0:  # Label every other point to avoid crowding
-        ax.annotate(f'${npv/1000:.1f}k', 
-                   (results['years'][i], npv),
-                   textcoords="offset points",
-                   xytext=(0,10),
-                   ha='center')
-
-# Add payback period line
+# Add annotations for payback period
 if results['payback_period'] != float('inf'):
-    ax.axvline(x=results['payback_period'], color='red', linestyle='--', alpha=0.5)
-    ax.text(results['payback_period'], max(results['npv_values']), 
-            f'Payback: {results["payback_period"]:.2f} yrs',
-            rotation=90)
-
-# Add zero line
-ax.axhline(y=0, color='gray', linestyle=':')
-
-# Customize plot
-ax.set_title('Project Cash Flows')
-ax.set_xlabel('Year')
-ax.set_ylabel('Net Present Value ($)')
-ax.grid(True)
-
-# Display the plot
-st.pyplot(fig)
+    st.caption(f"Payback Period: {results['payback_period']:.2f} years")
 
 # Add explanatory text
 st.markdown("""
