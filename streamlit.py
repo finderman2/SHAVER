@@ -139,7 +139,7 @@ with metrics_col1:
 with metrics_col2:
     st.metric("Peak Reduction", f"{results['peak_reduction']:.1f} kW")
 with metrics_col3:
-    st.metric("$/kW Reduced", f"${results['system_costs']['total_cost']/results['peak_reduction']:,.0f}")
+    st.metric("New Peak Value", f"{peak_load - results['peak_reduction']:.1f} kW")
 
 # Display financial metrics
 st.subheader("Financial Metrics")
