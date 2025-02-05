@@ -1,12 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-# Import matplotlib and set backend before creating any figures
-import matplotlib
-matplotlib.use('agg')
 import matplotlib.pyplot as plt
-
-st.set_page_config(layout="wide", page_title="Battery Storage Analysis")
 
 def calculate_cashflows(params):
     """Calculate annual cash flows and financial metrics"""
@@ -30,7 +25,7 @@ def calculate_cashflows(params):
     cash_flows.extend([annual_savings] * params['analysis_years'])
     
     # Calculate cumulative NPV for each year
-    discount_rate = 0.08  # 8% discount rate
+    discount_rate = 0.03  # 3% discount rate
     npv_values = []
     running_npv = -total_system_cost
     
@@ -50,7 +45,6 @@ def calculate_cashflows(params):
             
     # Calculate IRR (simple approximation)
     try:
-        cash_flows_series = pd.Series(cash_flows)
         irr = np.roots([total_system_cost] + [-annual_savings] * params['analysis_years'])
         irr = float([r.real for r in irr if r.real > 0 and abs(r.imag) < 1e-10][0]) - 1
     except:
@@ -69,81 +63,86 @@ def calculate_cashflows(params):
 # Page Title
 st.title("Battery Storage Peak Shaving Analysis")
 
-# Sidebar with input parameters
-st.sidebar.header("System Parameters")
+# Create two columns for input parameters
+col1, col2 = st.columns(2)
 
+with col1:
+    st.subheader("System Parameters")
+    peak_load = st.number_input("Peak Load (kW)", min_value=10, max_value=1000, value=72)
+    peak_duration = st.number_input("Peak Duration (hours)", min_value=0.5, max_value=8.0, value=2.5)
+    battery_power = st.number_input("Battery Power (kW)", min_value=10, max_value=1000, value=60)
+    battery_capacity = st.number_input("Battery Capacity (kWh)", min_value=10, max_value=2000, value=210)
+
+with col2:
+    st.subheader("Financial Parameters")
+    peak_demand_charge = st.number_input("Peak Demand Charge ($/kW)", min_value=5, max_value=50, value=22)
+    system_cost = st.number_input("System Cost ($/kWh)", min_value=100, max_value=1000, value=426)
+    analysis_years = st.slider("Analysis Period (years)", min_value=5, max_value=30, value=15)
+
+# Collect parameters
 params = {
-    'peak_load_kw': st.sidebar.number_input("Peak Load (kW)", min_value=10, max_value=1000, value=72),
-    'peak_duration_hours': st.sidebar.number_input("Peak Duration (hours)", min_value=0.5, max_value=8.0, value=2.5),
-    'battery_power_kw': st.sidebar.number_input("Battery Power (kW)", min_value=10, max_value=1000, value=60),
-    'battery_capacity_kwh': st.sidebar.number_input("Battery Capacity (kWh)", min_value=10, max_value=2000, value=210),
-    'peak_demand_charge': st.sidebar.number_input("Peak Demand Charge ($/kW)", min_value=5, max_value=50, value=22),
-    'system_cost_per_kwh': st.sidebar.number_input("System Cost ($/kWh)", min_value=100, max_value=1000, value=426),
-    'analysis_years': st.sidebar.slider("Analysis Period (years)", min_value=5, max_value=30, value=15)
+    'peak_load_kw': peak_load,
+    'peak_duration_hours': peak_duration,
+    'battery_power_kw': battery_power,
+    'battery_capacity_kwh': battery_capacity,
+    'peak_demand_charge': peak_demand_charge,
+    'system_cost_per_kwh': system_cost,
+    'analysis_years': analysis_years
 }
 
 # Calculate results
 results = calculate_cashflows(params)
 
-# Create two columns for metrics
-col1, col2 = st.columns(2)
+# Display key metrics
+st.subheader("Key Metrics")
+metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
 
-with col1:
+with metrics_col1:
     st.metric("Total System Cost", f"${results['total_system_cost']:,.0f}")
+with metrics_col2:
     st.metric("Annual Savings", f"${results['annual_savings']:,.0f}")
-
-with col2:
+with metrics_col3:
     st.metric("Peak Reduction", f"{results['peak_reduction']:.1f} kW")
+
+metrics_col4, metrics_col5, _ = st.columns(3)
+with metrics_col4:
     st.metric("Simple Payback", f"{results['payback_period']:.1f} years")
+with metrics_col5:
     st.metric("IRR", f"{results['irr']*100:.1f}%")
 
-# Create the plot
-plt.style.use('seaborn')
-fig, ax = plt.subplots(figsize=(12, 8))
+# Create matplotlib figure
+fig, ax = plt.subplots(figsize=(10, 6))
 
 # Plot NPV line
-npv_values = results['npv_values']
-years = results['years']
-line = ax.plot(years, npv_values, marker='o', linewidth=2, color='#2563eb', label='Net Present Value')
-
-# Format y-axis labels to show dollar amounts in thousands
-ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, p: f'${x/1000:,.0f}k'))
+ax.plot(results['years'], results['npv_values'], marker='o', linewidth=2, color='blue')
 
 # Add value labels
-for i, npv in enumerate(npv_values):
+for i, npv in enumerate(results['npv_values']):
     if i % 2 == 0:  # Label every other point to avoid crowding
         ax.annotate(f'${npv/1000:.1f}k', 
-                   (years[i], npv),
+                   (results['years'][i], npv),
                    textcoords="offset points",
                    xytext=(0,10),
-                   ha='center',
-                   fontsize=8)
+                   ha='center')
 
 # Add payback period line
 if results['payback_period'] != float('inf'):
-    ax.axvline(x=results['payback_period'], color='gray', linestyle='--', alpha=0.5)
-    ax.text(results['payback_period'], ax.get_ylim()[1], 
+    ax.axvline(x=results['payback_period'], color='red', linestyle='--', alpha=0.5)
+    ax.text(results['payback_period'], max(results['npv_values']), 
             f'Payback: {results["payback_period"]:.2f} yrs',
-            rotation=90, ha='right', va='top')
+            rotation=90)
 
 # Add zero line
-ax.axhline(y=0, color='gray', linestyle=':', alpha=0.5)
+ax.axhline(y=0, color='gray', linestyle=':')
 
 # Customize plot
-ax.set_title('Project Cash Flows', pad=20)
+ax.set_title('Project Cash Flows')
 ax.set_xlabel('Year')
 ax.set_ylabel('Net Present Value ($)')
-ax.grid(True, alpha=0.3)
-ax.legend()
+ax.grid(True)
 
-# Adjust layout
-plt.tight_layout()
-
-# Use Streamlit's pyplot function
+# Display the plot
 st.pyplot(fig)
-
-# Clean up the plot
-plt.close(fig)
 
 # Add explanatory text
 st.markdown("""
