@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="Battery Storage Analysis")
 
@@ -22,7 +22,7 @@ def calculate_cashflows(params):
     annual_savings = monthly_savings * 12
     
     # Generate cash flows
-    years = range(params['analysis_years'] + 1)
+    years = list(range(params['analysis_years'] + 1))
     cash_flows = [-total_system_cost]  # Initial investment
     cash_flows.extend([annual_savings] * params['analysis_years'])
     
@@ -38,15 +38,20 @@ def calculate_cashflows(params):
             running_npv += annual_savings / ((1 + discount_rate) ** year)
             npv_values.append(running_npv)
     
-    # Calculate IRR
-    irr = np.irr(cash_flows)
-    
-    # Find payback period
+    # Calculate payback period
     payback_period = None
     for i, npv in enumerate(npv_values):
         if npv >= 0:
             payback_period = i
             break
+            
+    # Calculate IRR (simple approximation)
+    try:
+        cash_flows_series = pd.Series(cash_flows)
+        irr = np.roots([total_system_cost] + [-annual_savings] * params['analysis_years'])
+        irr = float([r.real for r in irr if r.real > 0 and abs(r.imag) < 1e-10][0]) - 1
+    except:
+        irr = 0
     
     return {
         'years': years,
@@ -54,7 +59,7 @@ def calculate_cashflows(params):
         'annual_savings': annual_savings,
         'total_system_cost': total_system_cost,
         'peak_reduction': actual_peak_reduction,
-        'irr': irr if irr is not None else 0,
+        'irr': irr,
         'payback_period': payback_period if payback_period is not None else float('inf')
     }
 
@@ -89,46 +94,44 @@ with col2:
     st.metric("Simple Payback", f"{results['payback_period']:.1f} years")
     st.metric("IRR", f"{results['irr']*100:.1f}%")
 
-# Create cash flow visualization
-fig = go.Figure()
+# Create matplotlib figure
+fig, ax = plt.subplots(figsize=(12, 8))
 
-# Add NPV line
-fig.add_trace(go.Scatter(
-    x=results['years'],
-    y=results['npv_values'],
-    mode='lines+markers+text',
-    name='Cumulative NPV',
-    text=[f"${x:,.1f}M" if abs(x) >= 1e6 else f"${x:,.0f}" for x in results['npv_values']],
-    textposition="top center",
-    textfont=dict(size=10),
-    line=dict(color='#2563eb', width=2)
-))
+# Plot NPV line
+npv_values = results['npv_values']
+years = results['years']
+ax.plot(years, npv_values, marker='o', linewidth=2, color='#2563eb')
 
-# Add payback period vertical line
+# Add value labels
+for i, npv in enumerate(npv_values):
+    if i % 2 == 0:  # Label every other point to avoid crowding
+        ax.annotate(f'${npv/1000:.1f}k', 
+                   (years[i], npv),
+                   textcoords="offset points",
+                   xytext=(0,10),
+                   ha='center')
+
+# Add payback period line
 if results['payback_period'] != float('inf'):
-    fig.add_vline(
-        x=results['payback_period'],
-        line_dash="dash",
-        line_color="gray",
-        annotation_text=f"Payback: {results['payback_period']:.2f} years"
-    )
-
-# Update layout
-fig.update_layout(
-    title="Project Cash Flows",
-    xaxis_title="Year",
-    yaxis_title="Net Present Value ($)",
-    showlegend=True,
-    height=600,
-    template="plotly_white",
-    hovermode='x unified'
-)
+    ax.axvline(x=results['payback_period'], color='gray', linestyle='--', alpha=0.5)
+    ax.text(results['payback_period'], ax.get_ylim()[1], 
+            f'Payback: {results["payback_period"]:.2f} yrs',
+            rotation=90, ha='right', va='top')
 
 # Add zero line
-fig.add_hline(y=0, line_dash="dot", line_color="gray")
+ax.axhline(y=0, color='gray', linestyle=':', alpha=0.5)
+
+# Customize plot
+ax.set_title('Project Cash Flows')
+ax.set_xlabel('Year')
+ax.set_ylabel('Net Present Value ($)')
+ax.grid(True, alpha=0.3)
+
+# Adjust layout
+plt.tight_layout()
 
 # Show the plot
-st.plotly_chart(fig, use_container_width=True)
+st.pyplot(fig)
 
 # Add explanatory text
 st.markdown("""
