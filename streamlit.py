@@ -60,7 +60,8 @@ def calculate_cashflows(params):
     }
 
 # Page Title
-st.title("Battery Storage Peak Shaving Analysis")
+st.title("🔋 SHAVER 🪒")
+st.subheader("Storage Harnessing And Value Estimation Return Tool")
 
 # Create two columns for input parameters
 col1, col2 = st.columns(2)
