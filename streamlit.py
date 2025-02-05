@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 def calculate_cashflows(params):
     """Calculate annual cash flows and financial metrics"""
@@ -114,51 +113,21 @@ with metrics_col5:
 with metrics_col6:
     st.metric("Discount Rate", f"{discount_rate:.1f}%")
 
-# Create matplotlib figure
-fig, ax = plt.subplots(figsize=(10, 6))
+# Create DataFrame for chart
+df = pd.DataFrame({
+    'Year': results['years'],
+    'NPV': results['npv_values'],
+    'Breakeven Line': [0] * len(results['years'])  # Add zero line
+})
 
-# Plot NPV line
-ax.plot(results['years'], results['npv_values'], marker='o', linewidth=2, color='blue')
+# Display chart
+st.subheader("Project Cash Flows")
+st.line_chart(df.set_index('Year'))
 
-# Add value labels
-for i, npv in enumerate(results['npv_values']):
-    if i % 2 == 0:  # Label every other point to avoid crowding
-        ax.annotate(f'${npv/1000:.1f}k', 
-                   (results['years'][i], npv),
-                   textcoords="offset points",
-                   xytext=(0,10),
-                   ha='center')
-
-# Add payback period line and callout
+# Add breakeven annotation
 if results['payback_period'] != float('inf'):
-    # Vertical line at breakeven
-    ax.axvline(x=results['payback_period'], color='red', linestyle='--', alpha=0.7, linewidth=2)
-    
-    # Calculate y-position for annotation (midpoint of chart)
-    y_range = max(results['npv_values']) - min(results['npv_values'])
-    y_mid = min(results['npv_values']) + y_range/2
-    
-    # Add callout annotation
-    ax.annotate(f'Breakeven: {results["payback_period"]:.1f} years',
-                xy=(results['payback_period'], 0),
-                xytext=(results['payback_period'] + 1, y_mid),
-                ha='left',
-                va='center',
-                bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
-                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0',
-                               color='red', alpha=0.7))
-
-# Add zero line
-ax.axhline(y=0, color='gray', linestyle=':')
-
-# Customize plot
-ax.set_title('Project Cash Flows')
-ax.set_xlabel('Year')
-ax.set_ylabel('Net Present Value ($)')
-ax.grid(True)
-
-# Display the plot
-st.pyplot(fig)
+    st.caption(f"⚡ Breakeven occurs at {results['payback_period']:.1f} years")
+    st.caption(f"💰 NPV at end of analysis period: ${results['npv_values'][-1]:,.0f}")
 
 # Add explanatory text
 st.markdown(f"""
