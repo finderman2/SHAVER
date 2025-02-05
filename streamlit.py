@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+# Import matplotlib and set backend before creating any figures
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="Battery Storage Analysis")
@@ -94,13 +97,17 @@ with col2:
     st.metric("Simple Payback", f"{results['payback_period']:.1f} years")
     st.metric("IRR", f"{results['irr']*100:.1f}%")
 
-# Create matplotlib figure
+# Create the plot
+plt.style.use('seaborn')
 fig, ax = plt.subplots(figsize=(12, 8))
 
 # Plot NPV line
 npv_values = results['npv_values']
 years = results['years']
-ax.plot(years, npv_values, marker='o', linewidth=2, color='#2563eb')
+line = ax.plot(years, npv_values, marker='o', linewidth=2, color='#2563eb', label='Net Present Value')
+
+# Format y-axis labels to show dollar amounts in thousands
+ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, p: f'${x/1000:,.0f}k'))
 
 # Add value labels
 for i, npv in enumerate(npv_values):
@@ -109,7 +116,8 @@ for i, npv in enumerate(npv_values):
                    (years[i], npv),
                    textcoords="offset points",
                    xytext=(0,10),
-                   ha='center')
+                   ha='center',
+                   fontsize=8)
 
 # Add payback period line
 if results['payback_period'] != float('inf'):
@@ -122,16 +130,20 @@ if results['payback_period'] != float('inf'):
 ax.axhline(y=0, color='gray', linestyle=':', alpha=0.5)
 
 # Customize plot
-ax.set_title('Project Cash Flows')
+ax.set_title('Project Cash Flows', pad=20)
 ax.set_xlabel('Year')
 ax.set_ylabel('Net Present Value ($)')
 ax.grid(True, alpha=0.3)
+ax.legend()
 
 # Adjust layout
 plt.tight_layout()
 
-# Show the plot
+# Use Streamlit's pyplot function
 st.pyplot(fig)
+
+# Clean up the plot
+plt.close(fig)
 
 # Add explanatory text
 st.markdown("""
