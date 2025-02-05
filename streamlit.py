@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-
-st.set_page_config(layout="wide", page_title="Battery Storage Analysis")
+import matplotlib.pyplot as plt
 
 def calculate_cashflows(params):
     """Calculate annual cash flows and financial metrics"""
@@ -26,7 +25,7 @@ def calculate_cashflows(params):
     cash_flows.extend([annual_savings] * params['analysis_years'])
     
     # Calculate cumulative NPV for each year
-    discount_rate = 0.08  # 8% discount rate
+    discount_rate = params['discount_rate'] / 100  # Convert percentage to decimal
     npv_values = []
     running_npv = -total_system_cost
     
@@ -78,6 +77,7 @@ with col2:
     st.subheader("Financial Parameters")
     peak_demand_charge = st.number_input("Peak Demand Charge ($/kW)", min_value=5, max_value=50, value=22)
     system_cost = st.number_input("System Cost ($/kWh)", min_value=100, max_value=1000, value=426)
+    discount_rate = st.number_input("Discount Rate (%)", min_value=0.0, max_value=20.0, value=8.0, step=0.5)
     analysis_years = st.slider("Analysis Period (years)", min_value=5, max_value=30, value=15)
 
 # Collect parameters
@@ -88,6 +88,7 @@ params = {
     'battery_capacity_kwh': battery_capacity,
     'peak_demand_charge': peak_demand_charge,
     'system_cost_per_kwh': system_cost,
+    'discount_rate': discount_rate,
     'analysis_years': analysis_years
 }
 
@@ -105,31 +106,65 @@ with metrics_col2:
 with metrics_col3:
     st.metric("Peak Reduction", f"{results['peak_reduction']:.1f} kW")
 
-metrics_col4, metrics_col5, _ = st.columns(3)
+metrics_col4, metrics_col5, metrics_col6 = st.columns(3)
 with metrics_col4:
     st.metric("Simple Payback", f"{results['payback_period']:.1f} years")
 with metrics_col5:
     st.metric("IRR", f"{results['irr']*100:.1f}%")
+with metrics_col6:
+    st.metric("Discount Rate", f"{discount_rate:.1f}%")
 
-# Create DataFrame for chart
-df = pd.DataFrame({
-    'Year': results['years'],
-    'NPV': results['npv_values']
-})
+# Create matplotlib figure
+fig, ax = plt.subplots(figsize=(10, 6))
 
-# Display chart
-st.subheader("Project Cash Flows")
-st.line_chart(df.set_index('Year'))
+# Plot NPV line
+ax.plot(results['years'], results['npv_values'], marker='o', linewidth=2, color='blue')
 
-# Add annotations for payback period
+# Add value labels
+for i, npv in enumerate(results['npv_values']):
+    if i % 2 == 0:  # Label every other point to avoid crowding
+        ax.annotate(f'${npv/1000:.1f}k', 
+                   (results['years'][i], npv),
+                   textcoords="offset points",
+                   xytext=(0,10),
+                   ha='center')
+
+# Add payback period line and callout
 if results['payback_period'] != float('inf'):
-    st.caption(f"Payback Period: {results['payback_period']:.2f} years")
+    # Vertical line at breakeven
+    ax.axvline(x=results['payback_period'], color='red', linestyle='--', alpha=0.7, linewidth=2)
+    
+    # Calculate y-position for annotation (midpoint of chart)
+    y_range = max(results['npv_values']) - min(results['npv_values'])
+    y_mid = min(results['npv_values']) + y_range/2
+    
+    # Add callout annotation
+    ax.annotate(f'Breakeven: {results["payback_period"]:.1f} years',
+                xy=(results['payback_period'], 0),
+                xytext=(results['payback_period'] + 1, y_mid),
+                ha='left',
+                va='center',
+                bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0',
+                               color='red', alpha=0.7))
+
+# Add zero line
+ax.axhline(y=0, color='gray', linestyle=':')
+
+# Customize plot
+ax.set_title('Project Cash Flows')
+ax.set_xlabel('Year')
+ax.set_ylabel('Net Present Value ($)')
+ax.grid(True)
+
+# Display the plot
+st.pyplot(fig)
 
 # Add explanatory text
-st.markdown("""
+st.markdown(f"""
 ### Analysis Details
 - The model calculates both power-limited and energy-limited peak reduction
-- Uses 8% discount rate for NPV calculations
+- Uses {discount_rate}% discount rate for NPV calculations
 - Assumes consistent monthly peak demand charges
 - Includes 90% round-trip battery efficiency
 - All costs and savings are in current dollars
