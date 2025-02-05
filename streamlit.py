@@ -2,9 +2,24 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+def calculate_system_cost(params):
+    """Calculate total system cost with separate battery and inverter components"""
+    battery_cost = params['battery_capacity_kwh'] * params['battery_cost_per_kwh']
+    inverter_cost = params['battery_power_kw'] * params['inverter_cost_per_kw']
+    installation_cost = (battery_cost + inverter_cost) * params['installation_factor']
+    
+    return {
+        'battery_cost': battery_cost,
+        'inverter_cost': inverter_cost,
+        'installation_cost': installation_cost,
+        'total_cost': battery_cost + inverter_cost + installation_cost
+    }
+
 def calculate_cashflows(params):
     """Calculate annual cash flows and financial metrics"""
-    total_system_cost = params['battery_capacity_kwh'] * params['system_cost_per_kwh']
+    # Get system costs
+    costs = calculate_system_cost(params)
+    total_system_cost = costs['total_cost']
     
     # Calculate peak reduction
     power_limited_reduction = min(params['battery_power_kw'], params['peak_load_kw'])
@@ -42,7 +57,7 @@ def calculate_cashflows(params):
             payback_period = i
             break
             
-    # Calculate IRR (simple approximation)
+    # Calculate IRR
     try:
         irr = np.roots([total_system_cost] + [-annual_savings] * params['analysis_years'])
         irr = float([r.real for r in irr if r.real > 0 and abs(r.imag) < 1e-10][0]) - 1
@@ -53,7 +68,7 @@ def calculate_cashflows(params):
         'years': years,
         'npv_values': npv_values,
         'annual_savings': annual_savings,
-        'total_system_cost': total_system_cost,
+        'system_costs': costs,
         'peak_reduction': actual_peak_reduction,
         'irr': irr,
         'payback_period': payback_period if payback_period is not None else float('inf')
@@ -63,20 +78,25 @@ def calculate_cashflows(params):
 st.title("🔋 SHAVER 🪒")
 st.subheader("Storage Harnessing And Value Estimation Return Tool")
 
-# Create two columns for input parameters
-col1, col2 = st.columns(2)
+# Create three columns for input parameters
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.subheader("System Parameters")
+    st.subheader("Load Parameters")
     peak_load = st.number_input("Peak Load (kW)", min_value=10, max_value=1000, value=72)
     peak_duration = st.number_input("Peak Duration (hours)", min_value=0.5, max_value=8.0, value=2.5)
-    battery_power = st.number_input("Battery Power (kW)", min_value=10, max_value=1000, value=60)
-    battery_capacity = st.number_input("Battery Capacity (kWh)", min_value=10, max_value=2000, value=210)
+    peak_demand_charge = st.number_input("Peak Demand Charge ($/kW)", min_value=5, max_value=50, value=22)
 
 with col2:
-    st.subheader("Financial Parameters")
-    peak_demand_charge = st.number_input("Peak Demand Charge ($/kW)", min_value=5, max_value=50, value=22)
-    system_cost = st.number_input("System Cost ($/kWh)", min_value=100, max_value=1000, value=426)
+    st.subheader("System Parameters")
+    battery_power = st.number_input("Battery Power (kW)", min_value=10, max_value=1000, value=60)
+    battery_capacity = st.number_input("Battery Capacity (kWh)", min_value=10, max_value=2000, value=210)
+    installation_factor = st.number_input("Installation Cost Factor", min_value=0.1, max_value=1.0, value=0.3, help="Additional cost as a fraction of equipment cost")
+
+with col3:
+    st.subheader("Cost Parameters")
+    battery_cost = st.number_input("Battery Cost ($/kWh)", min_value=100, max_value=1000, value=300)
+    inverter_cost = st.number_input("Inverter Cost ($/kW)", min_value=100, max_value=1000, value=200)
     discount_rate = st.number_input("Discount Rate (%)", min_value=0.0, max_value=20.0, value=8.0, step=0.5)
     analysis_years = st.slider("Analysis Period (years)", min_value=5, max_value=30, value=15)
 
@@ -87,7 +107,9 @@ params = {
     'battery_power_kw': battery_power,
     'battery_capacity_kwh': battery_capacity,
     'peak_demand_charge': peak_demand_charge,
-    'system_cost_per_kwh': system_cost,
+    'battery_cost_per_kwh': battery_cost,
+    'inverter_cost_per_kw': inverter_cost,
+    'installation_factor': installation_factor,
     'discount_rate': discount_rate,
     'analysis_years': analysis_years
 }
@@ -95,23 +117,39 @@ params = {
 # Calculate results
 results = calculate_cashflows(params)
 
-# Display key metrics
-st.subheader("Key Metrics")
+# Display system costs
+st.subheader("System Costs")
+cost_col1, cost_col2, cost_col3, cost_col4 = st.columns(4)
+
+with cost_col1:
+    st.metric("Battery Cost", f"${results['system_costs']['battery_cost']:,.0f}")
+with cost_col2:
+    st.metric("Inverter Cost", f"${results['system_costs']['inverter_cost']:,.0f}")
+with cost_col3:
+    st.metric("Installation Cost", f"${results['system_costs']['installation_cost']:,.0f}")
+with cost_col4:
+    st.metric("Total System Cost", f"${results['system_costs']['total_cost']:,.0f}")
+
+# Display performance metrics
+st.subheader("Performance Metrics")
 metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
 
 with metrics_col1:
-    st.metric("Total System Cost", f"${results['total_system_cost']:,.0f}")
-with metrics_col2:
     st.metric("Annual Savings", f"${results['annual_savings']:,.0f}")
-with metrics_col3:
+with metrics_col2:
     st.metric("Peak Reduction", f"{results['peak_reduction']:.1f} kW")
+with metrics_col3:
+    st.metric("$/kW Reduced", f"${results['system_costs']['total_cost']/results['peak_reduction']:,.0f}")
 
-metrics_col4, metrics_col5, metrics_col6 = st.columns(3)
-with metrics_col4:
+# Display financial metrics
+st.subheader("Financial Metrics")
+fin_col1, fin_col2, fin_col3 = st.columns(3)
+
+with fin_col1:
     st.metric("Simple Payback", f"{results['payback_period']:.1f} years")
-with metrics_col5:
+with fin_col2:
     st.metric("IRR", f"{results['irr']*100:.1f}%")
-with metrics_col6:
+with fin_col3:
     st.metric("Discount Rate", f"{discount_rate:.1f}%")
 
 # Create DataFrame for chart
@@ -133,7 +171,9 @@ if results['payback_period'] != float('inf'):
 # Add explanatory text
 st.markdown(f"""
 ### Analysis Details
-- The model calculates both power-limited and energy-limited peak reduction
+- Battery cost: ${battery_cost}/kWh
+- Inverter cost: ${inverter_cost}/kW
+- Installation factor: {installation_factor*100}% of equipment cost
 - Uses {discount_rate}% discount rate for NPV calculations
 - Assumes consistent monthly peak demand charges
 - Includes 90% round-trip battery efficiency
